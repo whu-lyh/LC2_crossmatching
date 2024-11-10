@@ -112,9 +112,9 @@ def main():
                         help='File name (with extension) to an ini file that stores most of the configuration data for patch-netvlad')
     parser.add_argument('--dataset_root_dir', type=str, default='/media/jhlee/4TBSSD/vivid_projects/data',
                         help='If the files in dataset_file_path are relative, use dataset_root_dir as prefix.')
-    parser.add_argument('--query_seq', type=str, default='campus_day1',
+    parser.add_argument('--query_seq', type=str, default='city_day1',
                         help='The sequence to use as query')
-    parser.add_argument('--db_seq', type=str, default='campus_day2',
+    parser.add_argument('--db_seq', type=str, default='city_day2',
                         help='The sequence to use as database')
 
     opt = parser.parse_args()

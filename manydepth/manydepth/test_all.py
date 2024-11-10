@@ -68,12 +68,10 @@ def load_and_preprocess_intrinsics(intrinsics_path, resize_width, resize_height)
 def test_simple(args):
     """Function to predict for a single image or folder of images
     """
-    assert args.model_path is not None, \
-        "You must specify the --model_path parameter"
+    assert args.model_path is not None, "You must specify the --model_path parameter"
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     print("-> Loading model from ", args.model_path)
-
     # Loading pretrained model
     print("   Loading pretrained encoder")
     encoder_dict = torch.load(os.path.join(args.model_path, "encoder.pth"), map_location=device)
@@ -88,25 +86,19 @@ def test_simple(args):
 
     filtered_dict_enc = {k: v for k, v in encoder_dict.items() if k in encoder.state_dict()}
     encoder.load_state_dict(filtered_dict_enc)
-
     print("   Loading pretrained decoder")
     depth_decoder = networks.DepthDecoder(num_ch_enc=encoder.num_ch_enc, scales=range(4))
-
     loaded_dict = torch.load(os.path.join(args.model_path, "depth.pth"), map_location=device)
     depth_decoder.load_state_dict(loaded_dict)
-
     print("   Loading pose network")
     pose_enc_dict = torch.load(os.path.join(args.model_path, "pose_encoder.pth"),
                                map_location=device)
     pose_dec_dict = torch.load(os.path.join(args.model_path, "pose.pth"), map_location=device)
-
     pose_enc = networks.ResnetEncoder(18, False, num_input_images=2)
     pose_dec = networks.PoseDecoder(pose_enc.num_ch_enc, num_input_features=1,
                                     num_frames_to_predict_for=2)
-
     pose_enc.load_state_dict(pose_enc_dict, strict=True)
     pose_dec.load_state_dict(pose_dec_dict, strict=True)
-
     # Setting states of networks
     encoder.eval()
     depth_decoder.eval()
@@ -117,29 +109,35 @@ def test_simple(args):
         depth_decoder.cuda()
         pose_enc.cuda()
         pose_dec.cuda()
-
     # Load input data
     print("   Running tests")
-    _, _, files = next(os.walk(args.target_image_path+'/left/'))
+    directory = args.target_image_path
+    disp_npy_path = os.path.join(directory, "disp_npy")
+    if not os.path.exists(disp_npy_path):
+        print(f"{disp_npy_path} is not existed!")
+        os.makedirs(disp_npy_path)
+    disp_path = os.path.join(directory, "disp")
+    if not os.path.exists(disp_path):
+        print(f"{disp_path} is not existed!")
+        os.makedirs(disp_path)
+    # get the whole images at the current data folder
+    _, _, files = next(os.walk(args.target_image_path + '/images/'))
     for _, sequence in enumerate(tqdm.tqdm(files)):
-        input_image, original_size = load_and_preprocess_image(args.target_image_path + '/left/' + sequence,
+        input_image, original_size = load_and_preprocess_image(args.target_image_path + '/images/' + sequence,
                                                                resize_width=encoder_dict['width'],
                                                                resize_height=encoder_dict['height'])
         K, invK = load_and_preprocess_intrinsics(args.intrinsics_json_path,
                                                  resize_width=encoder_dict['width'],
                                                  resize_height=encoder_dict['height'])
-
+        # feed the forward pass
         with torch.no_grad():
-
             # Estimate poses
             pose_inputs = [input_image, input_image]
             pose_inputs = [pose_enc(torch.cat(pose_inputs, 1))]
             axisangle, translation = pose_dec(pose_inputs)
             pose = transformation_from_parameters(axisangle[:, 0], translation[:, 0], invert=True)
-
             pose *= 0  # zero poses are a signal to the encoder not to construct a cost volume
             source_image = input_image * 0
-
             # Estimate depth
             output, lowest_cost, _ = encoder(current_image=input_image,
                                              lookup_images=source_image.unsqueeze(1),
@@ -148,20 +146,15 @@ def test_simple(args):
                                              invK=invK,
                                              min_depth_bin=encoder_dict['min_depth_bin'],
                                              max_depth_bin=encoder_dict['max_depth_bin'])
-
             output = depth_decoder(output)
-
             sigmoid_output = output[("disp", 0)]
             sigmoid_output_resized = torch.nn.functional.interpolate(
                 sigmoid_output, original_size, mode="bilinear", align_corners=False)
             sigmoid_output_resized = sigmoid_output_resized.cpu().numpy()[:, 0]
-
             # Saving numpy file
-            directory = args.target_image_path
             output_name = os.path.splitext(sequence)[0]
-            name_dest_npy = os.path.join(directory, "disp_npy", "{}.npy".format(output_name))
+            name_dest_npy = os.path.join(disp_npy_path, "{}.npy".format(output_name))
             np.save(name_dest_npy, sigmoid_output.cpu().numpy())
-
             # Saving colormapped depth image and cost volume argmin
             for plot_name, toplot in (('costvol_min', lowest_cost), ('disp', sigmoid_output_resized)):
                 toplot = toplot.squeeze()
@@ -169,8 +162,7 @@ def test_simple(args):
                 mapper = cm.ScalarMappable(norm=normalizer, cmap='magma')
                 colormapped_im = (mapper.to_rgba(toplot)[:, :, :3] * 255).astype(np.uint8)
                 im = pil.fromarray(colormapped_im)
-
-                name_dest_im = os.path.join(directory,"disp","{}.png".format(output_name))
+                name_dest_im = os.path.join(disp_path, "{}.png".format(output_name))
                 im.save(name_dest_im)
 
     print('-> ' + args.target_image_path.split('/')[-1] + ' was processed!')

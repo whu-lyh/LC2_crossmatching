@@ -1,0 +1,4 @@
+matplotlib
+faiss-gpu
+pandas
+scikit-learn

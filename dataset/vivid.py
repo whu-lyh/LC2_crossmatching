@@ -137,6 +137,7 @@ class VisibilityDataset(Dataset):
         qSeqKeys = qSeqKeys_d
 
         # utm coordinates
+        print(qData[1, :2])
         utmQ = np.array(qData[:, :2], dtype=float)
         utmDb = np.array(dbData[:, :2], dtype=float)
         utmDistQ = np.sum(np.linalg.norm(utmQ[:-1] - utmQ[1:], axis=1)) / (len(self.qImages)-1)
@@ -202,7 +203,7 @@ class VisibilityDataset(Dataset):
     def array_as_path(self, path, data, ext):
         qkeys = []
         for i in range(np.shape(data)[0]):
-            qkeys.append(join(path, data[i, 2] + ext))
+            qkeys.append(join(path, data[i, 1] + ext))
         return qkeys
 
     @staticmethod
